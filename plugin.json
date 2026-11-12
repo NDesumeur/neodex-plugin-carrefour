@@ -1,0 +1,22 @@
+{
+  "id": "neodex.carrefour",
+  "name": "Carrefour",
+  "version": "1.0.0",
+  "author": "NDesumeur",
+  "description": "Jeu de réflexe : règle les feux d'un croisement où des voitures et des bus arrivent des quatre côtés. Un clic (ou une flèche) passe un feu au vert ou au rouge. Évite l'accident au milieu et ne laisse personne attendre trop longtemps, sinon il klaxonne et tu perds une étoile. De plus en plus de voitures. Record et accidents comptés.",
+  "icon": "icon.png",
+  "entry": "index.js",
+  "view": "carrefour",
+  "neobase": ">=4.0.0",
+  "type": "app",
+  "category": "Jeux",
+  "syncMode": "progression",
+  "syncInfo": "Record.",
+  "mobile": false,
+  "system": false,
+  "dependencies": {},
+  "sdk": "2.1.0",
+  "permissions": [
+    "storage"
+  ]
+}
