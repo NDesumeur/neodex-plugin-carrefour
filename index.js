@@ -368,12 +368,11 @@ function cfBeep(f, d, type = 'square', slide = 0, vol = .04) { try { cfac ??= ne
 const renew = (old, o) => { if (!old) return o; for (const k of Object.keys(old)) if (k !== 'raf') delete old[k]; return Object.assign(old, o); };
 function cfNew() {
   const g = cf?.g;
-  cf = renew(cf, {g, mode: 'ready', tick: 0, seen: 0, t: 0, cars: [], light: {E: 1, W: 1, S: 0, N: 0}, next: 30, passed: 0, stars: 3, dead: 0, crash: null, record: false, rnd: seeded(Date.now() % 1e9), id: 0, first: true, honk: []});
+  cf = renew(cf, {g, mode: 'ready', tick: 0, seen: 0, t: 0, cars: [], light: {E: 1, W: 1, S: 0, N: 0}, next: {E: 30, W: 110, S: 190, N: 260}, passed: 0, stars: 3, dead: 0, crash: null, record: false, rnd: seeded(Date.now() % 1e9), id: 0, first: true, honk: []});
   cfInfo();
 }
-function cfSpawn() {
-  const r = cf.rnd, d = cf.first ? (r() < .5 ? 'E' : 'W') : 'EWSN'[Math.floor(r() * 4)], bus = !cf.first && r() < .12;
-  cf.first = false;
+function cfSpawn(d) {
+  const r = cf.rnd, bus = cf.id > 0 && r() < .12;  // la première voiture n'est jamais un bus : elle passe vite
   const len = bus ? 19 : 12, last = cf.cars.filter(c => c.d === d).reduce((m, c) => Math.min(m, c.s - c.len), 1e9);
   if (last < 4) return false;  // la file arrive au bord : la voiture attendra son tour
   const diff = Math.min(1, cf.t / (60 * 150));
@@ -391,7 +390,8 @@ function cfUpdate() {
   if (cf.mode !== 'play') return;
   cf.t++;
   const diff = Math.min(1, cf.t / (60 * 150));
-  if (--cf.next <= 0) { cfSpawn(); cf.next = Math.round(110 - 70 * diff + cf.rnd() * 50); }
+  // chaque côté a son propre flot, régulier : jamais de vague puis de vide, et un croisement tout au vert finit vite en accident
+  for (const d of 'EWSN') if (--cf.next[d] <= 0) cf.next[d] = cfSpawn(d) ? Math.round((230 - 120 * diff) * (.7 + cf.rnd() * .6)) : 15;
   for (const c of cf.cars) {
     // jusqu'où avancer : la ligne d'arrêt si le feu est rouge (et qu'on ne l'a pas passée), la voiture de devant
     let lim = 1e9;
@@ -463,17 +463,19 @@ document.addEventListener('keydown', e => {
     cfToggle([...'EWSN'].sort((a, b) => near(a) - near(b))[0]); }; }
 $('cfNew').onclick = () => { cfNew(); $('cfNew').blur(); };
 {  // vérification : une voiture s'arrête au feu rouge sans le passer, repart au vert ; deux voitures qui se croisent au vert se percutent
-  const keep = cf, realBest = games.best.carrefour, realStats = {...cfs}; cf = null; cfNew(); cf.mode = 'play'; cf.next = 1e9;
+  const keep = cf, realBest = games.best.carrefour, realStats = {...cfs}; cf = null; cfNew(); cf.mode = 'play'; cf.next = {E: 1e9, W: 1e9, S: 1e9, N: 1e9};
   cf.light.E = 0; cf.cars.push({id: 1, d: 'E', s: 0, len: 12, v: 0, vmax: 1, col: 0, wait: 0, angry: 0});
   for (let i = 0; i < 300; i++) cfUpdate();
   const stopped = cf.cars[0].s <= CF.STOP + .01 && cf.cars[0].s > CF.STOP - 2;
   cf.light.E = 1; for (let i = 0; i < 400; i++) cfUpdate();
   const gone = cf.passed === 1;
-  cfNew(); cf.mode = 'play'; cf.next = 1e9; cf.light = {E: 1, W: 1, S: 1, N: 1};
+  cfNew(); cf.mode = 'play'; cf.next = {E: 1e9, W: 1e9, S: 1e9, N: 1e9}; cf.light = {E: 1, W: 1, S: 1, N: 1};
   cf.cars.push({id: 1, d: 'E', s: 40, len: 12, v: 1, vmax: 1, col: 0, wait: 0, angry: 0}, {id: 2, d: 'S', s: 40, len: 12, v: 1, vmax: 1, col: 1, wait: 0, angry: 0});
   for (let i = 0; i < 200 && cf.mode === 'play'; i++) cfUpdate();
   const crash = cf.mode === 'over' && !!cf.crash;
-  console.assert(stopped && gone && crash, 'carrefour', {stopped, gone, crash});
+  let allGreen = 1e9;  // tout au vert dès le début : l'accident arrive en moins de 40 secondes
+  for (const seed of [1, 2, 3]) { cfNew(); cf.rnd = seeded(seed); cf.mode = 'play'; cf.light = {E: 1, W: 1, S: 1, N: 1}; let i = 0; for (; i < 60 * 40 && cf.mode === 'play'; i++) cfUpdate(); allGreen = Math.min(allGreen, cf.crash ? 0 : i); }
+  console.assert(stopped && gone && crash && allGreen === 0, 'carrefour', {stopped, gone, crash, allGreen});
   if (realBest === undefined) delete games.best.carrefour; else games.best.carrefour = realBest; Object.assign(cfs, realStats);
   cf = keep;
 }
