@@ -5,14 +5,18 @@ const HTML = `<div class="appWrap wide">
   <div class="gMain"><div class="gameBox"><canvas id="cfCanvas" width="160" height="160" role="img" aria-label="Carrefour"></canvas></div>
     <div class="gSide">
       <div class="sysCard"><b>RECORDS</b><div class="gStats" id="cfStats"></div></div>
-      <div class="row"><button class="btn main" id="cfNew">NOUVELLE PARTIE</button></div>
-      <div class="hint">Chaque feu passe du vert au rouge quand tu cliques dessus (ou près de sa voie). Au clavier, la flèche montre le côté d'où viennent les voitures : ← celles de gauche, ↑ celles du haut, etc. Deux voitures qui se croisent au milieu, c'est l'accident et la partie s'arrête. Une voiture arrêtée trop longtemps s'impatiente (la pastille jaune puis rouge), klaxonne et te coûte une étoile : à 0 étoile, c'est le bouchon. Les bus sont longs et lents. Il arrive de plus en plus de voitures.</div>
+      <div class="row"><select class="gSel" id="cfMap" aria-label="Carrefour"></select></div>
+      <div class="row"><button class="btn main" id="cfNew">NOUVELLE PARTIE</button><button class="btn" id="cfFs">PLEIN ÉCRAN</button></div>
+      <div class="hint">Chaque feu passe du vert au rouge quand tu cliques dessus (ou près de sa voie). Au clavier, la flèche montre le côté d'où viennent les voitures : ← celles de gauche, ↑ celles du haut, etc. Deux voitures qui se croisent au milieu, c'est l'accident et la partie s'arrête. Une voiture arrêtée trop longtemps s'impatiente (la pastille jaune puis rouge), klaxonne et te coûte une étoile : à 0 étoile, c'est le bouchon. Les bus sont longs et lents, le tracteur et le vélo très lents ; l'ambulance (gyrophare bleu) est prioritaire : bloquée deux secondes, elle te coûte une étoile. Il arrive de plus en plus de voitures.</div>
+      <div class="hint">25 voitures à un carrefour ouvrent le suivant : le passage à niveau (B baisse la barrière avant le train, la cloche prévient), le rond-point (tout le monde y roule au même pas) et l'étoile à six voies (touches 1 à 6).</div>
     </div></div>
 </div>`;
 const CSS = `.gMain{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
-.gameBox{display:grid;place-items:center;padding:10px;background:#05010b;flex:0 0 auto;position:relative}
-.gameBox canvas{height:min(72vh,640px);width:auto;aspect-ratio:1;image-rendering:pixelated;cursor:var(--cp,pointer);touch-action:none}
-.gSide{display:flex;flex-direction:column;gap:14px;flex:1;min-width:250px;max-width:420px}
+.gameBox{display:grid;place-items:center;padding:10px;background:#05010b;flex:2 1 520px;min-width:min(100%,520px);position:relative}
+.gameBox canvas{width:min(100%,max(320px,calc(100vh - 200px)));height:auto;aspect-ratio:1;image-rendering:pixelated;cursor:var(--cp,pointer);touch-action:none}
+.gameBox:fullscreen{padding:0;display:grid;place-items:center}
+.gameBox:fullscreen canvas{width:min(100vw,100vh)}
+.gSide{display:flex;flex-direction:column;gap:14px;flex:0 1 320px;min-width:250px}
 .gSide .sysCard{display:flex;flex-direction:column}
 .gStats{display:grid;grid-template-columns:1fr auto;gap:4px 14px}
 .gStats b{text-align:right}`;
@@ -232,7 +236,7 @@ ${R} .rhImport .pxSel{flex:1;min-width:0}
       document.querySelector('.pxMenu')?.remove();
       const m = document.createElement('div'), r = b.getBoundingClientRect(); m.className = 'pxMenu'; m.setAttribute('role', 'listbox');
       for (const o of sel.options) {
-        const it = document.createElement('button'); it.type = 'button'; it.textContent = o.textContent; it.className = o.selected ? 'on' : ''; it.setAttribute('role', 'option');
+        const it = document.createElement('button'); it.type = 'button'; it.textContent = o.textContent; it.className = o.selected ? 'on' : ''; it.disabled = o.disabled; it.setAttribute('role', 'option');
         it.onclick = () => { sel.value = o.value; sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); close(); b.focus(); };
         m.append(it);
       }
@@ -322,133 +326,258 @@ function sprite(g, rows, x, y, pal) { rows.forEach((r, j) => { for (let i = 0; i
 const seeded = s => () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 const pxFont = (g, text, x, y, color, size = 8, align = 'left') => { const s = PXK.scale(size); PXK.fill(g, text, x + s, y + s, '#05010b', s, align); PXK.fill(g, text, x, y, color, s, align); };
 
-/* ---------- Carrefour : des voitures arrivent des quatre côtés d'un croisement ; on passe chaque feu au vert ou au rouge.
-   Un choc = perdu ; une voiture qui attend trop longtemps fait perdre une étoile (3 étoiles). On roule à droite ---------- */
-const CF = {W: 160, H: 160, ROAD0: 68, ROAD1: 92, STOP: 59, WAIT: 600};
-// chaque sens : 'E' arrive de la gauche, 'W' de la droite, 'S' du haut, 'N' du bas ; lane = la coordonnée de sa voie
-const CF_DIRS = {E: {lane: 86, h: true, sgn: 1}, W: {lane: 74, h: true, sgn: -1}, S: {lane: 74, h: false, sgn: 1}, N: {lane: 86, h: false, sgn: -1}};
-const cfs = gstore('carrefour', {games: 0, cars: 0, crashes: 0});
+/* ---------- Carrefour : des véhicules arrivent de tous les côtés ; on passe chaque feu au vert ou au rouge.
+   Un choc = perdu ; un véhicule qui attend trop longtemps fait perdre une étoile (3 étoiles). On roule à droite.
+   Quatre carrefours, chacun débloqué par 25 voitures au précédent : le croisement, le passage à niveau (une barrière et un train),
+   le rond-point (on y roule tous au même pas, il faut laisser entrer au bon moment) et l'étoile à six voies.
+   Chaque véhicule suit un trajet (une suite de points) : s = la distance parcourue par son avant. ---------- */
+const CF = {W: 160, H: 160, C: 80, WAIT: 600, RING: 20, RV: .7, TX: 26, UNLOCK: 25};
+const cfs = gstore('carrefour', {games: 0, cars: 0, crashes: 0, map: 0}); cfs.map ??= 0;
 let cf = null, cfac = null;
-// une voiture vue de dessus, tournée vers le haut (y : phares, r : feux arrière, w : vitres, B : toit) ; le bus est plus long
+// --- les trajets
+function cfPath(pts, o = {}) {  // o.stops : [{s, light}], o.ring : à partir de là, vitesse du rond-point
+  const L = [0]; for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  return {pts, L, len: L.at(-1), stops: o.stops || [], ring: o.ring ?? Infinity};
+}
+function cfAt(P, s) {  // le point du trajet à la distance s, et la direction (au-delà des bouts : dans le prolongement)
+  const {pts, L} = P; let i = 1; while (i < pts.length - 1 && L[i] < s) i++;
+  const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], k = (s - L[i - 1]) / (L[i] - L[i - 1] || 1);
+  return {x: x0 + (x1 - x0) * k, y: y0 + (y1 - y0) * k, a: Math.atan2(y1 - y0, x1 - x0)};
+}
+const cfLine = (x0, y0, x1, y1) => [[x0, y0], [x1, y1]];
+// le croisement : quatre voies droites (E arrive de la gauche, W de la droite, S du haut, N du bas)
+const CF_STRAIGHT = {E: cfLine(0, 86, 220, 86), W: cfLine(160, 74, -60, 74), S: cfLine(74, 0, 74, 220), N: cfLine(86, 160, 86, -60)};
+const cfCross = extra => Object.fromEntries('EWSN'.split('').map(d => [d, [cfPath(CF_STRAIGHT[d], {stops: [{s: 59, light: d}, ...(extra[d] || [])]})]]));
+// le rond-point : on entre en tournant à droite, on tourne dans le sens inverse des aiguilles d'une montre, on sort un, deux ou trois bras plus loin
+const CF_ARM = {E: 180, N: 90, W: 0, S: 270};  // l'angle (vers le bas = 90°) du bras d'où arrive chaque voie
+function cfRound() {
+  const C = CF.C, R = CF.RING, pt = a => [C + R * Math.cos(a * Math.PI / 180), C + R * Math.sin(a * Math.PI / 180)];
+  const edge = {180: [[-40, 74], [0, 86]], 0: [[200, 86], [160, 74]], 90: [[74, 200], [86, 160]], 270: [[86, -40], [74, 0]]};  // [bout de la sortie, début de l'entrée]
+  const out = {};
+  for (const d of 'EWSN') {
+    const a = CF_ARM[d], ain = a - 17.5, start = edge[a][1], e = pt(ain), appr = Math.hypot(e[0] - start[0], e[1] - start[1]);
+    out[d] = [1, 2, 3].map(k => {  // 1 : à droite, 2 : tout droit, 3 : à gauche
+      const b = (a - 90 * k + 360) % 360, aout = b + 17.5 - (b + 17.5 > ain ? 360 : 0), arc = [];
+      for (let t = ain; t > aout + .1; t -= 7.5) arc.push(pt(t));
+      return Object.assign(cfPath([start, ...arc, pt(aout), edge[b][0]], {stops: [{s: appr - 3, light: d}], ring: appr}), {turn: k});
+    });
+  }
+  return out;
+}
+// l'étoile : trois routes qui se croisent (0°, 60°, 120°), six voies tout droit
+const CF_STAR = [0, 60, 120, 180, 240, 300];
+function cfStar() {
+  const out = {};
+  CF_STAR.forEach((deg, i) => { const a = deg * Math.PI / 180, h = [Math.cos(a), Math.sin(a)], r = [-h[1], h[0]], o = (k, s) => CF.C + h[k] * s + r[k] * 6;
+    out['v' + (i + 1)] = [cfPath([[o(0, -115), o(1, -115)], [o(0, 135), o(1, 135)]], {stops: [{s: 115 - 27, light: 'v' + (i + 1)}]})]; });
+  return out;
+}
+// la voie de chaque feu : ses touches, le texte affiché à côté
+const CF_ARROW = {E: '←', W: '→', S: '↑', N: '↓'};
+const CF_MAPS = [
+  {id: 'croisement', name: 'Croisement', rec: 'carrefour', lanes: cfCross({}), lights: {E: 1, W: 1, S: 0, N: 0},
+    help: ['Clique un feu', 'ou flèche du même côté', 'Pas de choc, pas d\'attente']},
+  {id: 'pn', name: 'Passage à niveau', rec: 'carrefour-pn', lanes: cfCross({E: [{s: 14, light: 'B'}], W: [{s: 124, light: 'B'}]}), lights: {E: 1, W: 1, S: 0, N: 0, B: 1}, train: true,
+    help: ['Un train passe à gauche', 'Baisse la barrière : B', 'quand la cloche sonne']},
+  {id: 'rond', name: 'Rond-point', rec: 'carrefour-rond', lanes: cfRound(), lights: {E: 1, W: 1, S: 0, N: 0},
+    help: ['Dans le rond-point,', 'tout le monde roule au même pas :', 'laisse entrer au bon moment']},
+  {id: 'etoile', name: 'Étoile à six voies', rec: 'carrefour-etoile', lanes: cfStar(), lights: {v1: 1, v4: 1, v2: 0, v3: 0, v5: 0, v6: 0},
+    help: ['Six voies, six feux', 'touches 1 à 6', 'Pas de choc, pas d\'attente']},
+];
+const cfMap = () => CF_MAPS[cf?.map ?? cfs.map] || CF_MAPS[0];
+const cfOpen = i => i === 0 || (games.best[CF_MAPS[i - 1].rec] || 0) >= CF.UNLOCK;
+// --- les véhicules, vus de dessus, tournés vers le haut (y : phares, r : feux arrière, w : vitres, B : toit)
 const CF_CAR = ['.kykkyk.', 'kbbbbbbk', 'kbwwwwbk', 'kbwwwwbk', 'kbbbbbbk', 'kbBBBBbk', 'kbBBBBbk', 'kbBBBBbk', 'kbbbbbbk', 'kbwwwwbk', 'kbbbbbbk', '.krkkrk.'];
 const CF_BUS = ['.kykkyk.', 'kbbbbbbk', 'kbwwwwbk', 'kbbbbbbk', 'kbBBBBbk', 'kbwBBwbk', 'kbBBBBbk', 'kbBBBBbk', 'kbwBBwbk', 'kbBBBBbk', 'kbBBBBbk', 'kbwBBwbk', 'kbBBBBbk', 'kbBBBBbk', 'kbwBBwbk', 'kbBBBBbk', 'kbbbbbbk', 'kbbbbbbk', '.krkkrk.'];
+// l'ambulance : blanche, bande et croix rouges, gyrophares bleus (L) qui clignotent
+const CF_AMBU = ['.kykkyk.', 'kbbbbbbk', 'kbwwwwbk', 'kbbbbbbk', 'kLbbbbLk', 'kbbRRbbk', 'kbRRRRbk', 'kbbRRbbk', 'kRRRRRRk', 'kbbbbbbk', 'kbbbbbbk', '.krkkrk.'];
+// le tracteur : capot vert, cabine, grosses roues arrière noires
+const CF_TRAC = ['..kyyk..', '..kGGk..', '.kkGGkk.', 'kk.GG.kk', 'kkGGGGkk', '.kGwwGk.', 'kkGwwGkk', 'kkkGGkkk', 'kkkGGkkk', 'kkkGGkkk', '.krkkrk.'];
+// le vélo : deux roues, un cycliste au casque orange
+const CF_BIKE = ['.k.', '.k.', 'kok', 'ksk', 'kck', '.k.', '.k.'];
 const CF_COLORS = [['#d83a3a', '#a82020'], ['#3a7ad8', '#2050a8'], ['#e8c83a', '#b89020'], ['#4aa84a', '#2a7a2a'], ['#e8e4ec', '#a8a4b0'], ['#8a4ab8', '#5a2a88']];
-const cfTurn = (rows, d) => {  // tourne les lignes : N tel quel, S à l'envers, E vers la droite, W vers la gauche
-  const h = rows.length, w = rows[0].length;
-  if (d === 'N') return rows; if (d === 'S') return rows.slice().reverse().map(r => [...r].reverse().join(''));
-  return Array.from({length: w}, (_, i) => Array.from({length: h}, (_, j) => d === 'E' ? rows[h - 1 - j][i] : rows[j][w - 1 - i]).join(''));
-};
-const cfArt = (rows, pal) => { const c = el('canvas'); c.width = rows[0].length; c.height = rows.length; sprite(c.getContext('2d'), rows, 0, 0, pal); return c; };
-const CF_SPR = {};
-for (const d of 'NSEW') { CF_SPR[d] = CF_COLORS.map(([b, B]) => cfArt(cfTurn(CF_CAR, d), {k: '#14101c', b, B, w: '#9ad8f0', y: '#fff6b0', r: '#ff4a3a'}));
-  CF_SPR[d + 'bus'] = cfArt(cfTurn(CF_BUS, d), {k: '#14101c', b: '#ff8a3a', B: '#e86a1a', w: '#9ad8f0', y: '#fff6b0', r: '#ff4a3a'}); }
-// le décor fixe : herbe tramée, trottoirs, chaussée, marquages, passages piétons, arbres et toits dans les coins
-const CF_GROUND = (() => { const c = el('canvas'); c.width = CF.W; c.height = CF.H; const g = c.getContext('2d'), r = seeded(5), {ROAD0: a, ROAD1: b, W} = CF;
-  px(g, '#3a7a3a', 0, 0, W, W); for (let i = 0; i < 500; i++) px(g, r() < .5 ? '#4a8a3a' : '#2f6a32', Math.floor(r() * W), Math.floor(r() * W));
-  px(g, '#8a8a92', 0, a - 4, W, b - a + 8); px(g, '#8a8a92', a - 4, 0, b - a + 8, W);
-  for (let x = 0; x < W; x += 8) { px(g, '#6a6a72', x, a - 4, 1, 4); px(g, '#6a6a72', x, b, 1, 4); px(g, '#6a6a72', a - 4, x, 4, 1); px(g, '#6a6a72', b, x, 4, 1); }
-  px(g, '#3a3a44', 0, a, W, b - a); px(g, '#3a3a44', a, 0, b - a, W);
-  for (let i = 0; i < 400; i++) { const x = Math.floor(r() * W), y = Math.floor(r() * W); if ((y >= a && y < b) || (x >= a && x < b)) px(g, '#44444e', x, y); }
-  for (let x = 0; x < W; x += 10) if (x + 5 < a - 8 || x > b + 8) { px(g, '#d8d8d8', x, 79, 5, 1); }
-  for (let y = 0; y < W; y += 10) if (y + 5 < a - 8 || y > b + 8) { px(g, '#d8d8d8', 79, y, 1, 5); }
-  for (let i = a + 1; i < b; i += 3) { px(g, '#e8e8e8', i, a - 7, 2, 5); px(g, '#e8e8e8', i, b + 2, 2, 5); px(g, '#e8e8e8', a - 7, i, 5, 2); px(g, '#e8e8e8', b + 2, i, 5, 2); }
-  const tree = (x, y) => { px(g, '#1e4a22', x - 4, y - 3, 9, 7); px(g, '#1e4a22', x - 3, y - 4, 7, 9); px(g, '#2f7a32', x - 3, y - 3, 7, 6); px(g, '#4aa84a', x - 2, y - 3, 3, 2); px(g, '#26401e', x - 3, y + 4, 7, 1); };
-  const house = (x, y, c1, c2) => { px(g, '#14101c', x - 1, y - 1, 22, 18); px(g, c1, x, y, 20, 8); px(g, c2, x, y + 8, 20, 8); for (let i = 0; i < 20; i += 3) px(g, '#14101c', x + i, y + 7, 1, 1); px(g, '#e8e4ec', x + 14, y + 2, 3, 3); };
-  house(14, 14, '#c85a3a', '#a8442a'); house(118, 124, '#6a5aa8', '#54468a'); tree(48, 22); tree(30, 50); tree(120, 30); tree(140, 52); tree(24, 120); tree(48, 142); tree(130, 100);
-  return c; })();
-const cfFront = c => c.s;  // distance parcourue par l'avant depuis le bord d'entrée
-function cfRect(c) {  // la boîte de la voiture sur l'écran
-  const D = CF_DIRS[c.d], half = 4, f = D.sgn > 0 ? c.s : CF.W - c.s, back = D.sgn > 0 ? f - c.len : f + c.len;
-  const lo = Math.min(f, back), hi = Math.max(f, back);
-  return D.h ? {x0: lo, x1: hi, y0: D.lane - half, y1: D.lane + half} : {x0: D.lane - half, x1: D.lane + half, y0: lo, y1: hi};
+const cfArt = (rows, pal) => { const c = el('canvas'); c.width = Math.max(...rows.map(r => r.length)); c.height = rows.length; sprite(c.getContext('2d'), rows, 0, 0, pal); return c; };
+const CF_BASE = {k: '#14101c', w: '#9ad8f0', y: '#fff6b0', r: '#ff4a3a'};
+const CF_IMG = {car: CF_COLORS.map(([b, B]) => cfArt(CF_CAR, {...CF_BASE, b, B})), bus: [cfArt(CF_BUS, {...CF_BASE, b: '#ff8a3a', B: '#e86a1a'})],
+  ambu: [cfArt(CF_AMBU, {...CF_BASE, b: '#f4f4f8', R: '#e8303a', L: '#3a6aff'}), cfArt(CF_AMBU, {...CF_BASE, b: '#f4f4f8', R: '#e8303a', L: '#b8e0ff'})],
+  trac: [cfArt(CF_TRAC, {...CF_BASE, G: '#3a9a3a', w: '#9ad8f0'})], bike: [cfArt(CF_BIKE, {k: '#14101c', o: '#ff8a3a', s: '#3a7ad8', c: '#e8c83a'})]};
+const CF_KIND = {car: {len: 12, v: .8}, bus: {len: 19, v: .6}, ambu: {len: 12, v: 1.35}, trac: {len: 11, v: .32}, bike: {len: 7, v: .5}};
+const cfRotCache = new Map();
+function cfRot(img, a) {  // le dessin tourné dans la direction a, pixel par pixel (sans flou), mis en cache par 1/32 de tour
+  const q = Math.round((a + Math.PI / 2) / (Math.PI / 16)) & 31, key = img; let m = cfRotCache.get(key); if (!m) cfRotCache.set(key, m = []);
+  if (m[q]) return m[q];
+  const w = img.width, h = img.height, S = Math.ceil(Math.hypot(w, h)) + 2, t = q * Math.PI / 16, co = Math.cos(t), si = Math.sin(t);
+  const src = img.getContext('2d').getImageData(0, 0, w, h).data, c = el('canvas'); c.width = c.height = S; const g = c.getContext('2d'), out = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const dx = x + .5 - S / 2, dy = y + .5 - S / 2, sx = Math.floor(dx * co + dy * si + w / 2), sy = Math.floor(-dx * si + dy * co + h / 2);
+    if (sx >= 0 && sy >= 0 && sx < w && sy < h) for (let k = 0; k < 4; k++) out.data[(y * S + x) * 4 + k] = src[(sy * w + sx) * 4 + k]; }
+  g.putImageData(out, 0, 0); return (m[q] = c);
 }
-const cfHit = (a, b) => a.x0 < b.x1 - 1 && b.x0 < a.x1 - 1 && a.y0 < b.y1 - 1 && b.y0 < a.y1 - 1;
-function cfBeep(f, d, type = 'square', slide = 0, vol = .04) { try { cfac ??= new AudioContext(); const o = cfac.createOscillator(), g = cfac.createGain(), t = cfac.currentTime; o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + d); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g).connect(cfac.destination); o.start(t); o.stop(t + d); } catch {} }
+// --- le décor de chaque carrefour
+function cfGround(road, deco) {  // road(x, y) : chaussée ; autour, 4 pixels de trottoir ; arbres et maisons là où il reste de l'herbe
+  const c = el('canvas'); c.width = CF.W; c.height = CF.H; const g = c.getContext('2d'), r = seeded(5), W = CF.W, side = new Uint8Array(W * W);
+  px(g, '#3a7a3a', 0, 0, W, W); for (let i = 0; i < 500; i++) px(g, r() < .5 ? '#4a8a3a' : '#2f6a32', Math.floor(r() * W), Math.floor(r() * W));
+  for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) { if (road(x, y)) { side[y * W + x] = 2; continue; } for (let d = 1; d <= 4 && !side[y * W + x]; d++) if (road(x + d, y) || road(x - d, y) || road(x, y + d) || road(x, y - d)) side[y * W + x] = 1; }
+  for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) { const s = side[y * W + x]; if (s === 1) px(g, (x + y) % 8 ? '#8a8a92' : '#6a6a72', x, y); else if (s === 2) px(g, r() < .06 ? '#44444e' : '#3a3a44', x, y); }
+  const free = (x, y, m) => { for (let j = -m; j <= m; j++) for (let i = -m; i <= m; i++) { const X = x + i, Y = y + j; if (X < 0 || Y < 0 || X >= W || Y >= W || side[Y * W + X]) return false; } return true; };
+  const tree = (x, y) => { if (!free(x, y, 6)) return; px(g, '#1e4a22', x - 4, y - 3, 9, 7); px(g, '#1e4a22', x - 3, y - 4, 7, 9); px(g, '#2f7a32', x - 3, y - 3, 7, 6); px(g, '#4aa84a', x - 2, y - 3, 3, 2); px(g, '#26401e', x - 3, y + 4, 7, 1); };
+  const house = (x, y, c1, c2) => { if (!free(x + 10, y + 8, 12)) return; px(g, '#14101c', x - 1, y - 1, 22, 18); px(g, c1, x, y, 20, 8); px(g, c2, x, y + 8, 20, 8); for (let i = 0; i < 20; i += 3) px(g, '#14101c', x + i, y + 7, 1, 1); px(g, '#e8e4ec', x + 14, y + 2, 3, 3); };
+  deco(g, {tree, house, side, r});
+  return c;
+}
+const cfDash = (g, x0, y0, x1, y1, col, keep) => { const n = Math.hypot(x1 - x0, y1 - y0); for (let k = 0; k < n; k++) if (k % 10 < 5) { const x = x0 + (x1 - x0) * k / n, y = y0 + (y1 - y0) * k / n; if (keep(x, y)) px(g, col, x, y); } };
+const CF_GROUND = {
+  croisement: cfGround((x, y) => (y >= 68 && y < 92) || (x >= 68 && x < 92), (g, {tree, house}) => {
+    cfDash(g, 0, 79.5, 160, 79.5, '#d8d8d8', x => x < 60 || x > 100); cfDash(g, 79.5, 0, 79.5, 160, '#d8d8d8', (x, y) => y < 60 || y > 100);
+    for (let i = 69; i < 92; i += 3) { px(g, '#e8e8e8', i, 61, 2, 5); px(g, '#e8e8e8', i, 94, 2, 5); px(g, '#e8e8e8', 61, i, 5, 2); px(g, '#e8e8e8', 94, i, 5, 2); }
+    house(14, 14, '#c85a3a', '#a8442a'); house(118, 124, '#6a5aa8', '#54468a'); [[48, 22], [30, 50], [120, 30], [140, 52], [24, 120], [48, 142], [130, 100]].forEach(p => tree(...p)); }),
+  pn: cfGround((x, y) => (y >= 68 && y < 92) || (x >= 68 && x < 92), (g, {tree, house}) => {
+    cfDash(g, 0, 79.5, 160, 79.5, '#d8d8d8', x => (x < 60 || x > 100) && (x < 16 || x > 36)); cfDash(g, 79.5, 0, 79.5, 160, '#d8d8d8', (x, y) => y < 60 || y > 100);
+    for (let i = 69; i < 92; i += 3) { px(g, '#e8e8e8', i, 61, 2, 5); px(g, '#e8e8e8', i, 94, 2, 5); px(g, '#e8e8e8', 61, i, 5, 2); px(g, '#e8e8e8', 94, i, 5, 2); }
+    // la voie ferrée : ballast, traverses, deux rails (encastrés dans la route au passage)
+    for (let y = 0; y < 160; y++) { const onRoad = y >= 68 && y < 92; if (!onRoad) for (let x = 17; x < 36; x++) px(g, (x * 7 + y * 3) % 5 ? '#7a6e60' : '#5a5048', x, y);
+      if (!onRoad && y % 4 === 0) px(g, '#5a3a22', 18, y, 17, 2); px(g, onRoad ? '#9a9aa4' : '#c8c8d0', 21, y, 1, 1); px(g, onRoad ? '#9a9aa4' : '#c8c8d0', 30, y, 1, 1); }
+    for (let k = 0; k < 12; k += 2) { px(g, '#e8e8e8', 12, 80 + k, 2, 1); px(g, '#e8e8e8', 38, 68 + k, 2, 1); }  // les lignes d'arrêt avant la voie ferrée
+    house(118, 124, '#6a5aa8', '#54468a'); house(110, 14, '#c85a3a', '#a8442a'); [[52, 22], [58, 50], [140, 52], [52, 120], [56, 142], [130, 100], [8, 120], [8, 40]].forEach(p => tree(...p)); }),
+  rond: cfGround((x, y) => { const d = Math.hypot(x + .5 - 80, y + .5 - 80); return d >= 12 && d < 28 || (d >= 12 && ((y >= 68 && y < 92) || (x >= 68 && x < 92))); }, (g, {tree, house, r}) => {
+    for (let y = 60; y < 100; y++) for (let x = 60; x < 100; x++) { const d = Math.hypot(x + .5 - 80, y + .5 - 80); if (d < 12) px(g, d > 10 ? '#8a8a92' : d < 4 ? '#4ab8e8' : d < 5 ? '#c8c8d0' : (x * 3 + y) % 7 ? '#3a8a3a' : '#ff7ab0', x, y); }  // l'îlot : bordure, pelouse fleurie, fontaine
+    px(g, '#d8f4ff', 79, 78, 2, 2);
+    cfDash(g, 0, 79.5, 160, 79.5, '#d8d8d8', x => x < 50 || x > 110); cfDash(g, 79.5, 0, 79.5, 160, '#d8d8d8', (x, y) => y < 50 || y > 110);
+    house(14, 14, '#c85a3a', '#a8442a'); house(118, 124, '#6a5aa8', '#54468a'); [[48, 22], [30, 50], [120, 30], [140, 52], [24, 120], [48, 142], [130, 100]].forEach(p => tree(...p)); }),
+  etoile: cfGround((x, y) => [0, 60, 120].some(d => { const a = d * Math.PI / 180; return Math.abs(-(x + .5 - 80) * Math.sin(a) + (y + .5 - 80) * Math.cos(a)) < 12; }), (g, {tree, house}) => {
+    for (const d of [0, 60, 120]) { const a = d * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); cfDash(g, 80 - c * 120, 80 - s * 120, 80 + c * 120, 80 + s * 120, '#d8d8d8', (x, y) => Math.hypot(x - 80, y - 80) > 34); }
+    [[20, 20], [140, 30], [20, 140], [140, 128], [80, 18], [80, 142], [12, 80], [148, 80]].forEach(p => tree(...p)); house(118, 2, '#c85a3a', '#a8442a'); house(20, 142, '#6a5aa8', '#54468a'); }),
+};
+// --- l'état d'une partie
 // une nouvelle partie garde le même objet : la boucle du jeu (gameLoop) continue de tourner dessus
 const renew = (old, o) => { if (!old) return o; for (const k of Object.keys(old)) if (k !== 'raf') delete old[k]; return Object.assign(old, o); };
-function cfNew() {
-  const g = cf?.g;
-  cf = renew(cf, {g, mode: 'ready', tick: 0, seen: 0, t: 0, cars: [], light: {E: 1, W: 1, S: 0, N: 0}, next: {E: 30, W: 110, S: 190, N: 260}, passed: 0, stars: 3, dead: 0, crash: null, record: false, rnd: seeded(Date.now() % 1e9), id: 0, first: true, honk: []});
+function cfNew(map = cfs.map) {
+  const g = cf?.g, M = CF_MAPS[map] || CF_MAPS[0], lanes = Object.keys(M.lanes);
+  cf = renew(cf, {g, map: CF_MAPS.indexOf(M), mode: 'ready', tick: 0, seen: 0, t: 0, cars: [], light: {...M.lights}, next: Object.fromEntries(lanes.map((d, i) => [d, 30 + i * 80])),
+    passed: 0, stars: 3, dead: 0, crash: null, record: false, rnd: seeded(Date.now() % 1e9), id: 0, honk: [], train: M.train ? {in: 900, y: -999} : null, siren: 0});
   cfInfo();
 }
 function cfSpawn(d) {
-  const r = cf.rnd, bus = cf.id > 0 && r() < .12;  // la première voiture n'est jamais un bus : elle passe vite
-  const len = bus ? 19 : 12, last = cf.cars.filter(c => c.d === d).reduce((m, c) => Math.min(m, c.s - c.len), 1e9);
-  if (last < 4) return false;  // la file arrive au bord : la voiture attendra son tour
-  const diff = Math.min(1, cf.t / (60 * 150));
-  cf.cars.push({id: cf.id++, d, s: 0, len, v: 0, vmax: (bus ? .6 : .8 + r() * .35) + diff * .25, col: Math.floor(r() * CF_COLORS.length), bus, wait: 0, angry: 0});
+  const r = cf.rnd, M = cfMap(), x = r(), late = cf.t > 60 * 20;
+  const kind = cf.id === 0 ? 'car' : x < .1 ? 'bus' : x < .16 && late && !cf.cars.some(c => c.kind === 'ambu') ? 'ambu' : x < .22 ? 'trac' : x < .3 ? 'bike' : 'car';  // la première voiture passe vite ; une seule ambulance à la fois
+  const K = CF_KIND[kind], last = cf.cars.filter(c => c.lane === d).reduce((m, c) => Math.min(m, c.s - c.len), 1e9);
+  if (last < 4) return false;  // la file arrive au bord : il attendra son tour
+  const paths = M.lanes[d], P = paths.length > 1 ? paths[r() < .35 ? 0 : r() < .62 ? 1 : 2] : paths[0];
+  const diff = Math.min(1, cf.t / (60 * 150)), vmax = kind === 'car' ? K.v + r() * .35 + diff * .25 : K.v + diff * .15;
+  cf.cars.push({id: cf.id++, lane: d, P, s: 0, len: K.len, v: 0, vmax, kind, col: Math.floor(r() * CF_COLORS.length), wait: 0, angry: 0});
   return true;
 }
-function cfToggle(d) { if (cf.mode !== 'play') return; cf.light[d] ^= 1; cfBeep(cf.light[d] ? 660 : 330, .05, 'square', 0, .03); }
-function cfDie(a, b) {
-  cf.mode = 'over'; cf.dead = 0; cf.crash = a && b ? {x: (cfRect(a).x0 + cfRect(a).x1) / 2, y: (cfRect(a).y0 + cfRect(a).y1) / 2} : null;
-  cfs.games++; cfs.cars += cf.passed; if (cf.crash) cfs.crashes++; cf.record = best('carrefour', cf.passed); saveGames(); cfInfo();
+const cfBody = c => [0, .5, 1].map(k => cfAt(c.P, c.s - c.len * k));  // l'avant, le milieu, l'arrière
+const cfOut = c => { const b = cfAt(c.P, c.s - c.len); return c.s > 60 && (b.x < -4 || b.y < -4 || b.x > CF.W + 4 || b.y > CF.H + 4); };
+function cfBeep(f, d, type = 'square', slide = 0, vol = .04) { try { cfac ??= new AudioContext(); const o = cfac.createOscillator(), g = cfac.createGain(), t = cfac.currentTime; o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + d); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g).connect(cfac.destination); o.start(t); o.stop(t + d); } catch {} }
+function cfToggle(d) { if (cf.mode !== 'play' || !(d in cf.light)) return; cf.light[d] ^= 1; cfBeep(d === 'B' ? (cf.light.B ? 520 : 260) : cf.light[d] ? 660 : 330, .05, 'square', 0, .03); }
+function cfDie(at) {
+  cf.mode = 'over'; cf.dead = 0; cf.crash = at || null;
+  cfs.games++; cfs.cars += cf.passed; if (cf.crash) cfs.crashes++; cf.record = best(cfMap().rec, cf.passed); saveGames(); cfInfo(); cfMapList();
   cfBeep(cf.crash ? 120 : 300, .6, 'sawtooth', 40, .08);
 }
 function cfUpdate() {
   if (cf.mode === 'over') { cf.dead++; return; }
   if (cf.mode !== 'play') return;
   cf.t++;
-  const diff = Math.min(1, cf.t / (60 * 150));
-  // chaque côté a son propre flot, régulier : jamais de vague puis de vide, et un croisement tout au vert finit vite en accident
-  for (const d of 'EWSN') if (--cf.next[d] <= 0) cf.next[d] = cfSpawn(d) ? Math.round((230 - 120 * diff) * (.7 + cf.rnd() * .6)) : 15;
+  const M = cfMap(), diff = Math.min(1, cf.t / (60 * 150)), nl = Object.keys(M.lanes).length;
+  // chaque voie a son propre flot, régulier : jamais de vague puis de vide, et un carrefour tout au vert finit vite en accident
+  for (const d in M.lanes) if (--cf.next[d] <= 0) cf.next[d] = cfSpawn(d) ? Math.round((230 - 120 * diff) * nl / 4 * (.7 + cf.rnd() * .6)) : 15;
   for (const c of cf.cars) {
-    // jusqu'où avancer : la ligne d'arrêt si le feu est rouge (et qu'on ne l'a pas passée), la voiture de devant
+    if (c.s >= c.P.ring) { c.v = CF.RV; c.s += c.v; continue; }  // dans le rond-point, tout le monde roule au même pas
+    // jusqu'où avancer : la ligne d'arrêt de chaque feu rouge pas encore passé, le véhicule de devant sur la même voie
     let lim = 1e9;
-    if (!cf.light[c.d] && cfFront(c) <= CF.STOP + 1) lim = CF.STOP;
-    for (const o of cf.cars) if (o !== c && o.d === c.d && o.s > c.s) lim = Math.min(lim, o.s - o.len - 3);
+    for (const st of c.P.stops) if (!cf.light[st.light] && c.s <= st.s + 1) lim = Math.min(lim, st.s);
+    for (const o of cf.cars) if (o !== c && o.lane === c.lane && o.s > c.s) lim = Math.min(lim, o.s - o.len - 3);
     const want = Math.max(0, Math.min(c.vmax, (lim - c.s) * .12));
     c.v = want < c.v ? want : Math.min(want, c.v + .03);
     c.s += c.v;
-    if (c.v < .05) { if (++c.wait > CF.WAIT) { c.wait = 0; c.angry = 90; cf.stars--; cf.honk.push({c, t: 40}); cfBeep(400, .2, 'square', 380, .06); if (cf.stars <= 0) return cfDie(); } } else c.wait = Math.max(0, c.wait - 2);
+    const patience = c.kind === 'ambu' ? CF.WAIT / 5 : CF.WAIT;  // l'ambulance est prioritaire : la bloquer deux secondes coûte une étoile
+    if (c.v < .05) { if (++c.wait > patience) { c.wait = 0; c.angry = 90; cf.stars--; cf.honk.push({c, t: 40, txt: c.kind === 'ambu' ? 'PRIORITÉ !' : 'TÛT !'}); cfBeep(400, .2, 'square', 380, .06); if (cf.stars <= 0) return cfDie(); } } else c.wait = Math.max(0, c.wait - 2);
     if (c.angry) c.angry--;
   }
-  // un choc au milieu du croisement
-  for (let i = 0; i < cf.cars.length; i++) for (let j = i + 1; j < cf.cars.length; j++) { const a = cf.cars[i], b = cf.cars[j]; if (CF_DIRS[a.d].h !== CF_DIRS[b.d].h && cfHit(cfRect(a), cfRect(b))) return cfDie(a, b); }
-  const before = cf.cars.length; cf.cars = cf.cars.filter(c => c.s - c.len < CF.W + 2);
+  // un choc : deux véhicules de voies différentes qui se touchent
+  const bodies = cf.cars.map(cfBody);
+  for (let i = 0; i < cf.cars.length; i++) for (let j = i + 1; j < cf.cars.length; j++) { if (cf.cars[i].lane === cf.cars[j].lane) continue;
+    for (const p of bodies[i]) for (const q of bodies[j]) if (Math.hypot(p.x - q.x, p.y - q.y) < 6.5) return cfDie({x: (p.x + q.x) / 2, y: (p.y + q.y) / 2}); }
+  // le train : la cloche sonne 4 secondes avant, puis il traverse ; un véhicule sur la voie ferrée à ce moment-là, c'est l'accident
+  const T = cf.train;
+  if (T) {
+    if (T.y > -999) { T.y += 2.2; for (const b of bodies) for (const p of b) if (Math.abs(p.x - CF.TX) < 7 && p.y > T.y - 70 && p.y < T.y) return cfDie({x: CF.TX, y: p.y});
+      if (T.y > CF.H + 80) { T.y = -999; T.in = 700 + Math.floor(cf.rnd() * 500); } }
+    else if (--T.in <= 0) { T.y = 0; cfBeep(220, .5, 'sawtooth', 200, .05); }
+    else if (T.in < 240 && T.in % 30 === 0) cfBeep(T.in % 60 ? 1320 : 1100, .08, 'triangle', 0, .04);
+  }
+  // l'ambulance : une sirène deux tons, douce
+  if (cf.cars.some(c => c.kind === 'ambu') && ++cf.siren % 40 === 0) cfBeep(cf.siren % 80 ? 960 : 720, .3, 'triangle', 0, .015);
+  const before = cf.cars.length; cf.cars = cf.cars.filter(c => !cfOut(c));
   if (cf.cars.length < before) { cf.passed += before - cf.cars.length; cfBeep(880, .03, 'square', 0, .02); }
   for (const h of cf.honk) h.t--; cf.honk = cf.honk.filter(h => h.t > 0);
 }
-// un feu, posé au bord de la voie, juste avant la ligne d'arrêt
-const cfLightPos = d => ({E: [CF.ROAD0 - 9, CF.ROAD1 + 2], W: [CF.ROAD1 + 4, CF.ROAD0 - 10], S: [CF.ROAD0 - 10, CF.ROAD0 - 9], N: [CF.ROAD1 + 4, CF.ROAD1 + 2]})[d];
+// les feux de chaque voie : le boîtier à droite de la voie, un peu avant la ligne d'arrêt ; la barrière à part
+function cfLights() {
+  const M = cfMap(), out = [];
+  for (const d in M.lanes) { const st = M.lanes[d][0].stops.find(s => s.light === d), p = cfAt(M.lanes[d][0], st.s), h = [Math.cos(p.a), Math.sin(p.a)];
+    out.push({id: d, x: p.x - h[0] * 7 - h[1] * 12, y: p.y - h[1] * 7 + h[0] * 12, key: CF_ARROW[d] || d.slice(1)}); }
+  if ('B' in cf.light) out.push({id: 'B', x: 8, y: 58, key: 'B'});
+  return out;
+}
 function cfDraw() {
-  const g = cf.g, {W, H} = CF;
+  const g = cf.g, {W, H} = CF, M = cfMap();
   for (; cf.seen < cf.tick; cf.seen++) if (cf.mode === 'over') cfUpdate();
   g.imageSmoothingEnabled = false;
-  g.drawImage(CF_GROUND, 0, 0);
-  // les lignes d'arrêt, blanches au vert, rouges au rouge
-  for (const d of 'EWSN') { const D = CF_DIRS[d], stop = D.sgn > 0 ? CF.STOP + 1 : W - CF.STOP - 2, col = cf.light[d] ? '#e8e8e8' : '#c83a3a';
-    D.h ? px(g, col, stop, D.lane - 5, 1, 10) : px(g, col, D.lane - 5, stop, 10, 1); }
-  // les voitures (une ombre décalée), puis celles qui klaxonnent
-  for (const c of cf.cars) { const r = cfRect(c), spr = c.bus ? CF_SPR[c.d + 'bus'] : CF_SPR[c.d][c.col];
-    px(g, 'rgba(0,0,0,.35)', r.x0 + 1, r.y0 + 2, r.x1 - r.x0, r.y1 - r.y0);
-    g.drawImage(spr, Math.round(r.x0), Math.round(r.y0));
-    if (c.wait > CF.WAIT * .5 && (cf.tick >> 3) % 2) { const x = Math.round((r.x0 + r.x1) / 2), y = Math.round(r.y0) - 6; px(g, '#14101c', x - 2, y - 1, 5, 6); px(g, c.wait > CF.WAIT * .8 ? '#ff4a3a' : '#ffd84a', x - 1, y, 3, 3); px(g, '#ffd84a', x - 1, y + 4, 3, 1); } }
-  for (const h of cf.honk) { const r = cfRect(h.c); pxFont(g, 'TÛT !', (r.x0 + r.x1) / 2, r.y0 - 4 - (40 - h.t) / 8, '#ffd84a', 8, 'center'); }
-  // les feux : poteau, boîtier, rouge en haut, vert en bas
-  for (const d of 'EWSN') { const [x, y] = cfLightPos(d), on = cf.light[d];
-    px(g, '#14101c', x, y, 6, 9); px(g, '#2a2a32', x + 1, y + 1, 4, 7); px(g, on ? '#4a1a1a' : '#ff4a3a', x + 2, y + 2, 2, 2); px(g, on ? '#7ee07a' : '#1a3a1a', x + 2, y + 5, 2, 2);
-    if (cf.mode === 'play') pxFont(g, {E: '←', W: '→', S: '↑', N: '↓'}[d], x + 3, y + (d === 'S' || d === 'W' ? -2 : 17), '#ffffff', 8, 'center'); }
+  g.drawImage(CF_GROUND[M.id], 0, 0);
+  // les lignes d'arrêt, blanches au vert, rouges au rouge (la barrière n'en a pas : elle a ses bras)
+  for (const d in M.lanes) { const P = M.lanes[d][0], st = P.stops.find(s => s.light === d), p = cfAt(P, st.s + 1), n = [-Math.sin(p.a), Math.cos(p.a)], col = cf.light[d] ? '#e8e8e8' : '#c83a3a';
+    for (let k = -5; k <= 5; k += .5) px(g, col, p.x + n[0] * k, p.y + n[1] * k); }
+  // les véhicules (une ombre décalée), puis ceux qui klaxonnent
+  for (const c of cf.cars) { const m = cfAt(c.P, c.s - c.len / 2), imgs = CF_IMG[c.kind], img = cfRot(c.kind === 'car' ? imgs[c.col] : c.kind === 'ambu' ? imgs[(cf.tick >> 3) % 2] : imgs[0], m.a), S = img.width;
+    g.save(); g.globalAlpha = .3; g.globalCompositeOperation = 'source-over'; g.filter = 'brightness(0)'; g.drawImage(img, Math.round(m.x - S / 2) + 1, Math.round(m.y - S / 2) + 2); g.restore();
+    g.drawImage(img, Math.round(m.x - S / 2), Math.round(m.y - S / 2));
+    if (c.wait > (c.kind === 'ambu' ? CF.WAIT / 10 : CF.WAIT * .5) && (cf.tick >> 3) % 2) { const x = Math.round(m.x), y = Math.round(m.y) - 12; px(g, '#14101c', x - 2, y - 1, 5, 6); px(g, c.wait > (c.kind === 'ambu' ? CF.WAIT / 6 : CF.WAIT * .8) ? '#ff4a3a' : '#ffd84a', x - 1, y, 3, 3); px(g, '#ffd84a', x - 1, y + 4, 3, 1); } }
+  for (const h of cf.honk) { const m = cfAt(h.c.P, h.c.s - h.c.len / 2); pxFont(g, h.txt, m.x, m.y - 10 - (40 - h.t) / 8, '#ffd84a', 8, 'center'); }
+  // le train et la barrière
+  const T = cf.train;
+  if (T) {
+    const warn = T.y > -999 || T.in < 240, blink = warn && (cf.tick >> 4) % 2;
+    if (T.y > -999) for (let k = 0; k < 3; k++) { const y1 = T.y - k * 24, y0 = y1 - 22; px(g, '#14101c', CF.TX - 6, y0 - 1, 12, 24); px(g, k ? '#3a6aa8' : '#c83a3a', CF.TX - 5, y0, 10, 22); px(g, k ? '#5a8ac8' : '#e85a4a', CF.TX - 5, y0, 3, 22);
+      for (let w = 3; w < 20; w += 5) px(g, '#9ad8f0', CF.TX - 3, y0 + w, 6, 2); if (!k) { px(g, '#fff6b0', CF.TX - 4, y1 - 1, 2, 1); px(g, '#fff6b0', CF.TX + 2, y1 - 1, 2, 1); } }
+    // les deux bras de la barrière, chacun en travers de la voie qui arrive (rouge et blanc), ou levés le long du trottoir
+    for (const [x, y, dy] of [[15, 93, -1], [37, 66, 1]]) { px(g, '#14101c', x - 1, y - 1, 3, 3);
+      for (let k = 1; k <= 12; k++) { const c = (k >> 2) % 2 ? '#e8e8e8' : '#d83a3a'; if (cf.light.B) px(g, c, x - dy * k, y, 1, 1); else px(g, c, x, y + dy * k, 2, 1); } }
+    // le signal : deux feux rouges qui clignotent quand le train arrive
+    px(g, '#14101c', 40, 54, 13, 7); px(g, blink ? '#ff4a3a' : '#4a1a1a', 42, 56, 3, 3); px(g, warn && !blink ? '#ff4a3a' : '#4a1a1a', 48, 56, 3, 3);
+  }
+  // les feux : poteau, boîtier, rouge en haut, vert en bas, et la touche à côté
+  for (const L of cfLights()) { const x = Math.round(L.x) - 3, y = Math.round(L.y) - 4, on = cf.light[L.id];
+    if (L.id === 'B') { px(g, '#14101c', x, y, 8, 9); px(g, on ? '#2a2a32' : '#d83a3a', x + 1, y + 1, 6, 7); px(g, '#e8e8e8', x + 2, y + 4, 4, 1); }
+    else { px(g, '#14101c', x, y, 6, 9); px(g, '#2a2a32', x + 1, y + 1, 4, 7); px(g, on ? '#4a1a1a' : '#ff4a3a', x + 2, y + 2, 2, 2); px(g, on ? '#7ee07a' : '#1a3a1a', x + 2, y + 5, 2, 2); }
+    if (cf.mode === 'play') pxFont(g, L.key, x + 3, y + (L.y < 80 ? -2 : 18), '#ffffff', 8, 'center'); }
   if (cf.crash) { const {x, y} = cf.crash, f = Math.min(6, cf.dead >> 2); for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; px(g, i % 2 ? '#ffd84a' : '#ff8a3a', x + Math.cos(a) * f * 1.5 - 1, y + Math.sin(a) * f * 1.5 - 1, 3, 3); } px(g, '#ffffff', x - 2, y - 2, 4, 4); }
   // l'affichage : voitures passées, étoiles
   px(g, 'rgba(10,8,16,.75)', 0, 0, W, 14);
   pxFont(g, cf.passed + (cf.passed > 1 ? ' voitures' : ' voiture'), 4, 10, '#ffffff', 8);
   for (let i = 0; i < 3; i++) { const x = W - 34 + i * 10; const c = i < cf.stars ? '#ffd84a' : '#3a3440'; px(g, c, x + 2, 3, 3, 7); px(g, c, x, 5, 7, 3); px(g, c, x + 1, 9, 2, 2); px(g, c, x + 4, 9, 2, 2); }
-  if (cf.mode === 'ready') gameText(g, W, [['CARREFOUR', '#ffd84a', 16], ['Clique un feu', '#ffffff'], ['ou flèche du même côté', '#ffffff'], ['Pas de choc, pas d\'attente', '#b8b0c8'], ['Record ' + (games.best.carrefour || 0), '#ffd84a'], ['Espace : jouer', '#b8b0c8']], 48);
+  if (cf.mode === 'ready') gameText(g, W, [[M.name.toUpperCase(), '#ffd84a', 8], ...M.help.map(t => [t, '#ffffff']), ['Record ' + (games.best[M.rec] || 0), '#ffd84a'], ['Espace : jouer', '#b8b0c8']], 46);
   if (cf.mode === 'pause') gameText(g, W, [['PAUSE', '#ffffff', 12], ['Espace : reprendre', '#b8b0c8']], 76);
-  if (cf.mode === 'over' && cf.dead > 40) gameText(g, W, [[cf.crash ? 'ACCIDENT !' : 'BOUCHON !', '#ff4a3a', 12], [cf.passed + (cf.passed > 1 ? ' voitures passées' : ' voiture passée'), '#ffffff'], [cf.record ? 'NOUVEAU RECORD !' : 'Record ' + (games.best.carrefour || 0), '#ffd84a'], [cf.dead > 60 ? 'Espace : recommencer' : '', '#b8b0c8']], 58);
-  if (cf.tick % 30 === 0) g.canvas.setAttribute('aria-label', 'Carrefour : ' + (cf.mode === 'play' ? cf.passed + ' voitures passées, ' + cf.stars + ' étoiles, feux verts : ' + ('EWSN'.split('').filter(d => cf.light[d]).map(d => ({E: 'gauche', W: 'droite', S: 'haut', N: 'bas'})[d]).join(', ') || 'aucun') : cf.mode === 'over' ? 'partie finie avec ' + cf.passed + ' voitures' : cf.mode === 'pause' ? 'pause' : 'prêt'));
+  if (cf.mode === 'over' && cf.dead > 40) gameText(g, W, [[cf.crash ? 'ACCIDENT !' : 'BOUCHON !', '#ff4a3a', 12], [cf.passed + (cf.passed > 1 ? ' voitures passées' : ' voiture passée'), '#ffffff'], [cf.record ? 'NOUVEAU RECORD !' : 'Record ' + (games.best[M.rec] || 0), '#ffd84a'],
+    ...(CF_MAPS[cf.map + 1] && !cfOpen(cf.map + 1) ? [[CF.UNLOCK + ' voitures : ' + CF_MAPS[cf.map + 1].name.toLowerCase(), '#7ee07a']] : []), [cf.dead > 60 ? 'Espace : recommencer' : '', '#b8b0c8']], 52);
+  if (cf.tick % 30 === 0) g.canvas.setAttribute('aria-label', 'Carrefour, ' + M.name.toLowerCase() + ' : ' + (cf.mode === 'play' ? cf.passed + ' voitures passées, ' + cf.stars + ' étoiles, feux verts : ' + (Object.keys(cf.light).filter(d => cf.light[d] && d !== 'B').map(d => ({E: 'gauche', W: 'droite', S: 'haut', N: 'bas'})[d] || 'voie ' + d.slice(1)).join(', ') || 'aucun') + (cf.train ? ', barrière ' + (cf.light.B ? 'levée' : 'baissée') : '') : cf.mode === 'over' ? 'partie finie avec ' + cf.passed + ' voitures' : cf.mode === 'pause' ? 'pause' : 'prêt'));
 }
 function cfInfo() {
-  $('cfStats').replaceChildren(...[['Record', (games.best.carrefour || 0) + ' voitures'], ['Parties', cfs.games], ['Voitures passées', cfs.cars], ['Accidents', cfs.crashes]].flatMap(([a, b]) => [el('span', '', a), el('b', '', String(b))]));
+  const M = cfMap();
+  $('cfStats').replaceChildren(...[['Record (' + M.name.toLowerCase() + ')', (games.best[M.rec] || 0) + ' voitures'], ['Parties', cfs.games], ['Voitures passées', cfs.cars], ['Accidents', cfs.crashes]].flatMap(([a, b]) => [el('span', '', a), el('b', '', String(b))]));
+}
+function cfMapList() {  // la liste des carrefours : ceux pas encore ouverts disent ce qu'il faut faire
+  $('cfMap').replaceChildren(...CF_MAPS.map((m, i) => { const o = el('option', '', cfOpen(i) ? m.name + ' · record ' + (games.best[m.rec] || 0) : m.name + ' · ' + CF.UNLOCK + ' voitures au ' + CF_MAPS[i - 1].name.toLowerCase()); o.value = i; o.disabled = !cfOpen(i); return o; }));
+  $('cfMap').value = String(cf?.map ?? cfs.map);
 }
 function cfStart() {
   if (cf.mode === 'ready' || cf.mode === 'pause') { cf.mode = 'play'; return true; }
-  if (cf.mode === 'over' && cf.dead > 60) { cfNew(); cf.mode = 'play'; return true; }
+  if (cf.mode === 'over' && cf.dead > 60) { cfNew(cf.map); cf.mode = 'play'; return true; }
   return false;
 }
-// les flèches pointent le côté d'où viennent les voitures : ← les voitures de gauche, ↑ celles du haut…
-const CF_KEYS = {ArrowLeft: 'E', ArrowRight: 'W', ArrowUp: 'S', ArrowDown: 'N', q: 'E', a: 'E', d: 'W', z: 'S', w: 'S', s: 'N'};
+// les flèches pointent le côté d'où viennent les voitures : ← les voitures de gauche, ↑ celles du haut… ; B la barrière ; 1 à 6 les voies de l'étoile
+const CF_KEYS = {ArrowLeft: 'E', ArrowRight: 'W', ArrowUp: 'S', ArrowDown: 'N', q: 'E', a: 'E', d: 'W', z: 'S', w: 'S', s: 'N', b: 'B', 1: 'v1', 2: 'v2', 3: 'v3', 4: 'v4', 5: 'v5', 6: 'v6'};
 document.addEventListener('keydown', e => {
   if (!view.classList.contains('on') || !cf || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -456,31 +585,45 @@ document.addEventListener('keydown', e => {
   if (CF_KEYS[k]) { e.preventDefault(); if (!e.repeat) cfToggle(CF_KEYS[k]); }
   if ((k === 'p' || k === 'Escape') && cf.mode === 'play') cf.mode = 'pause';
 });
-// à la souris ou au doigt : le feu le plus proche de l'endroit touché change
+// à la souris ou au doigt : le feu le plus proche de l'endroit touché change (son boîtier ou sa ligne d'arrêt)
 { const cv = $('cfCanvas');
-  cv.onpointerdown = e => { e.preventDefault(); if (!cf || cfStart()) return; const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * CF.W, y = (e.clientY - r.top) / r.height * CF.H;
-    const near = d => { const D = CF_DIRS[d], stop = D.sgn > 0 ? CF.STOP - 14 : CF.W - CF.STOP + 14; return D.h ? Math.hypot(x - stop, y - D.lane) : Math.hypot(x - D.lane, y - stop); };
-    cfToggle([...'EWSN'].sort((a, b) => near(a) - near(b))[0]); }; }
-$('cfNew').onclick = () => { cfNew(); $('cfNew').blur(); };
-{  // vérification : une voiture s'arrête au feu rouge sans le passer, repart au vert ; deux voitures qui se croisent au vert se percutent
-  const keep = cf, realBest = games.best.carrefour, realStats = {...cfs}; cf = null; cfNew(); cf.mode = 'play'; cf.next = {E: 1e9, W: 1e9, S: 1e9, N: 1e9};
-  cf.light.E = 0; cf.cars.push({id: 1, d: 'E', s: 0, len: 12, v: 0, vmax: 1, col: 0, wait: 0, angry: 0});
-  for (let i = 0; i < 300; i++) cfUpdate();
-  const stopped = cf.cars[0].s <= CF.STOP + .01 && cf.cars[0].s > CF.STOP - 2;
-  cf.light.E = 1; for (let i = 0; i < 400; i++) cfUpdate();
-  const gone = cf.passed === 1;
-  cfNew(); cf.mode = 'play'; cf.next = {E: 1e9, W: 1e9, S: 1e9, N: 1e9}; cf.light = {E: 1, W: 1, S: 1, N: 1};
-  cf.cars.push({id: 1, d: 'E', s: 40, len: 12, v: 1, vmax: 1, col: 0, wait: 0, angry: 0}, {id: 2, d: 'S', s: 40, len: 12, v: 1, vmax: 1, col: 1, wait: 0, angry: 0});
-  for (let i = 0; i < 200 && cf.mode === 'play'; i++) cfUpdate();
-  const crash = cf.mode === 'over' && !!cf.crash;
-  let allGreen = 1e9;  // tout au vert dès le début : l'accident arrive en moins de 40 secondes
-  for (const seed of [1, 2, 3]) { cfNew(); cf.rnd = seeded(seed); cf.mode = 'play'; cf.light = {E: 1, W: 1, S: 1, N: 1}; let i = 0; for (; i < 60 * 40 && cf.mode === 'play'; i++) cfUpdate(); allGreen = Math.min(allGreen, cf.crash ? 0 : i); }
-  console.assert(stopped && gone && crash && allGreen === 0, 'carrefour', {stopped, gone, crash, allGreen});
-  if (realBest === undefined) delete games.best.carrefour; else games.best.carrefour = realBest; Object.assign(cfs, realStats);
-  cf = keep;
+  cv.onpointerdown = e => { e.preventDefault(); if (!cf || cfStart()) return; const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * CF.W, y = (e.clientY - r.top) / r.height * CF.H, M = cfMap();
+    const near = L => { if (L.id === 'B') return Math.min(Math.hypot(x - L.x, y - L.y), Math.abs(x - CF.TX) < 14 && y > 60 && y < 100 ? 0 : 1e9);
+      const P = M.lanes[L.id][0], st = P.stops.find(s => s.light === L.id), p = cfAt(P, st.s - 14); return Math.min(Math.hypot(x - L.x, y - L.y), Math.hypot(x - p.x, y - p.y)); };
+    cfToggle(cfLights().sort((a, b) => near(a) - near(b))[0].id); }; }
+$('cfNew').onclick = () => { cfNew(cf.map); $('cfNew').blur(); };
+$('cfMap').onchange = () => { const i = +$('cfMap').value; if (!cfOpen(i)) return cfMapList(); cfs.map = i; saveGames(); cfNew(i); cfInfo(); };
+$('cfFs').onclick = () => { $('cfFs').blur(); if (document.fullscreenElement) document.exitFullscreen(); else $('cfCanvas').parentElement.requestFullscreen?.().catch(() => {}); };
+function cfCheck() {  // vérification de chaque carrefour ; renvoie 'ok' ou ce qui ne va pas
+  const keep = cf, realBest = {...games.best}, realStats = {...cfs}, bad = [], run = n => { for (let i = 0; i < n && cf.mode === 'play'; i++) cfUpdate(); };
+  const fresh = m => { cf = null; cfNew(m); cf.mode = 'play'; for (const d in cf.next) cf.next[d] = 1e9; if (cf.train) cf.train.in = 1e9; };
+  const car = (lane, o = {}) => { const M = CF_MAPS[cf.map], c = {id: cf.id++, lane, P: M.lanes[lane][o.turn ?? 0], s: 0, len: 12, v: 0, vmax: 1, kind: 'car', col: 0, wait: 0, angry: 0, ...o}; cf.cars.push(c); return c; };
+  // croisement : arrêt au rouge sans passer la ligne, départ au vert ; deux voitures qui se croisent au vert se percutent ; tout au vert finit en accident
+  fresh(0); cf.light.E = 0; const a = car('E'); run(300); if (!(a.s <= 59.01 && a.s > 57)) bad.push('arrêt au rouge');
+  cf.light.E = 1; run(400); if (cf.passed !== 1) bad.push('départ au vert');
+  fresh(0); cf.light = {E: 1, W: 1, S: 1, N: 1}; car('E', {s: 40, v: 1}); car('S', {s: 40, v: 1}); run(200); if (!(cf.mode === 'over' && cf.crash)) bad.push('choc au milieu');
+  let allGreen = 1e9; for (const seed of [1, 2, 3]) { cf = null; cfNew(0); cf.rnd = seeded(seed); cf.mode = 'play'; cf.light = {E: 1, W: 1, S: 1, N: 1}; let i = 0; for (; i < 60 * 40 && cf.mode === 'play'; i++) cfUpdate(); allGreen = Math.min(allGreen, cf.crash ? 0 : i); }
+  if (allGreen) bad.push('tout au vert sans accident');
+  // l'ambulance bloquée au rouge coûte une étoile en 2 secondes
+  fresh(0); cf.light.E = 0; car('E', {kind: 'ambu', vmax: 1.35}); run(60 * 4); if (cf.stars !== 2) bad.push('ambulance prioritaire');
+  // passage à niveau : la barrière baissée arrête avant la voie ferrée ; une voiture arrêtée sur la voie quand le train passe, c'est l'accident
+  fresh(1); cf.light.B = 0; const b = car('E'); run(300); if (!(b.s <= 14.01 && b.s > 12)) bad.push('barrière');
+  fresh(1); car('E', {s: 30, vmax: 0}); cf.train.in = 1; run(200); if (!(cf.mode === 'over' && cf.crash)) bad.push('train');
+  fresh(1); cf.light.B = 0; car('E', {s: 10, vmax: 0}); cf.train.in = 1; run(200); if (cf.mode !== 'play' || cf.train.y !== -999) bad.push('train qui passe sans accident');
+  // rond-point : une voiture entre, fait le tour par la droite et sort à gauche, tout droit ou à droite ; deux qui arrivent ensemble se percutent
+  for (const turn of [0, 1, 2]) { fresh(2); const c = car('E', {turn}); let near = 1e9; for (let i = 0; i < 900 && !cf.passed && cf.mode === 'play'; i++) { cfUpdate(); const p = cfAt(c.P, c.s); near = Math.min(near, Math.hypot(p.x - 80, p.y - 80)); }
+    const end = c.P.pts.at(-1); if (cf.passed !== 1 || near > 22) bad.push('rond-point ' + turn); if (turn === 1 && end[0] < 150) bad.push('tout droit'); }
+  fresh(2); cf.light = {E: 1, W: 1, S: 1, N: 1}; const e2 = car('E', {turn: 2, v: CF.RV, vmax: CF.RV}); e2.s = e2.P.ring; const n2 = car('N', {turn: 1, v: CF.RV, vmax: CF.RV}); n2.s = n2.P.ring - 31.4; run(900);  // la deuxième entre au moment où la première passe devant elle if (!(cf.mode === 'over' && cf.crash)) bad.push('choc au rond-point');
+  // étoile : chaque voie passe tout droit ; tout au vert finit en accident
+  fresh(3); for (const d in cf.light) cf.light[d] = 1; for (const d in CF_MAPS[3].lanes) { cf.cars = []; const c = car(d); cf.passed = 0; run(500); if (cf.passed !== 1) bad.push('étoile ' + d); }
+  cf = null; cfNew(3); cf.rnd = seeded(2); cf.mode = 'play'; for (const d in cf.light) cf.light[d] = 1; run(60 * 40); if (!cf.crash) bad.push('étoile tout au vert');
+  games.best = realBest; Object.assign(cfs, realStats); cf = keep;
+  return bad.length ? bad.join(', ') : 'ok';
 }
+$('cfCanvas').__cf = {st: () => cf, check: cfCheck, maps: CF_MAPS, force: i => { cfs.map = i; cfNew(i); }};  // pour l'auto-test
+console.assert(cfCheck() === 'ok', 'carrefour', cfCheck());
 ctx.onOpen(() => {
-  if (!cf || !cf.g) { cfNew(); cf.g = $('cfCanvas').getContext('2d'); }
+  if (!cf || !cf.g) { cfNew(cfOpen(cfs.map) ? cfs.map : 0); cf.g = $('cfCanvas').getContext('2d'); cfMapList(); }
   gameLoop(cf, 'carrefour', cfUpdate, cfDraw); cfInfo();
 });
 }

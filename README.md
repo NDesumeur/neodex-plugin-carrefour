@@ -1,6 +1,6 @@
 # Carrefour
 
-Un jeu de réflexe en pixel art : tu règles les feux d'un croisement où des voitures et des bus arrivent des quatre côtés. Fais-en passer le plus possible, sans accident et sans bouchon.
+Un jeu de réflexe en pixel art : tu règles les feux d'un carrefour où voitures, bus, tracteurs, vélos et ambulances arrivent de tous les côtés. Quatre carrefours à débloquer, du simple croisement à l'étoile à six voies. Fais-en passer le plus possible, sans accident et sans bouchon.
 
 *English version: [README.en.md](README.en.md)*
 
@@ -8,7 +8,8 @@ Un jeu de réflexe en pixel art : tu règles les feux d'un croisement où des vo
 
 - **Clic** ou **doigt** sur un feu (ou près de sa voie) : il passe du vert au rouge, ou l'inverse.
 - **Flèches** : la flèche montre le côté d'où viennent les voitures. **←** change le feu des voitures qui arrivent de gauche, **↑** celui des voitures du haut, **→** de droite, **↓** du bas. ZQSD marche aussi.
-- **P** ou **Échap** : pause.
+- **B** : baisse ou lève la barrière du passage à niveau. **1 à 6** : les six feux de l'étoile.
+- **P** ou **Échap** : pause. **PLEIN ÉCRAN** : le carrefour prend tout l'écran.
 
 ## Comment ça marche
 
@@ -17,11 +18,21 @@ Un jeu de réflexe en pixel art : tu règles les feux d'un croisement où des vo
 - **Deux voitures qui se croisent au milieu : accident**, la partie s'arrête.
 - Une voiture arrêtée s'impatiente : une pastille jaune, puis rouge, s'allume au-dessus d'elle. Au bout de 10 secondes, elle klaxonne et tu perds **une étoile**. À 0 étoile, c'est le **bouchon**.
 - Les **bus** sont longs et lents : il leur faut plus de temps pour dégager le croisement.
+- Le **tracteur** et le **vélo** roulent très lentement. L'**ambulance** (gyrophare bleu, sirène) est **prioritaire** : bloquée deux secondes à un feu rouge, elle te coûte une étoile (« PRIORITÉ ! »).
 - Il arrive de plus en plus de voitures, de plus en plus vite.
+
+## Les quatre carrefours
+
+Choisis le carrefour dans la liste. Faire passer **25 voitures** dans une partie ouvre le suivant.
+
+- **Croisement** : deux routes, quatre feux.
+- **Passage à niveau** : une voie ferrée coupe la route à gauche. Quand la cloche sonne et que le signal clignote, un train arrive 4 secondes plus tard : baisse la **barrière** (touche **B** ou clic sur son feu) pour que personne ne reste sur les rails.
+- **Rond-point** : on y entre en tournant à droite, puis tout le monde tourne au même pas. Chacun sort à droite, tout droit ou à gauche. Il faut laisser entrer au bon moment, sinon deux voitures se touchent dans l'anneau.
+- **Étoile à six voies** : trois routes se croisent au même point, six feux numérotés de 1 à 6.
 
 ## Statistiques
 
-Le panneau Records garde ton **record** de voitures passées, le nombre de **parties**, le total des **voitures passées** et des **accidents**.
+Le panneau Records garde ton **record** de voitures passées sur le carrefour choisi, le nombre de **parties**, le total des **voitures passées** et des **accidents**.
 
 ## Données et synchronisation
 
