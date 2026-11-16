@@ -103,5 +103,18 @@
   "Record (croisement)": "Best (crossing)",
   "Record (passage à niveau)": "Best (level crossing)",
   "Record (rond-point)": "Best (roundabout)",
-  "Record (étoile à six voies)": "Best (six-way star)"
+  "Record (étoile à six voies)": "Best (six-way star)",
+  ", barrière": ", barrier",
+  "levée": "raised",
+  "baissée": "lowered",
+  "voitures au": "cars at",
+  "arrêt au rouge": "stop on red",
+  "départ au vert": "go on green",
+  "choc au milieu": "crash in the middle",
+  "tout au vert sans accident": "all green without accident",
+  "barrière": "barrier",
+  "train qui passe sans accident": "train passing without accident",
+  "tout droit": "straight on",
+  "étoile": "star",
+  "étoile tout au vert": "all-green star"
 }
