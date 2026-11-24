@@ -4,6 +4,10 @@ Un jeu de réflexe en pixel art : tu règles les feux d'un carrefour où voiture
 
 *English version: [README.en.md](README.en.md)*
 
+## Deux carrefours (nouveau en 1.2.0)
+
+Un cinquième carrefour, ouvert par 25 voitures à l'étoile : deux carrefours reliés par une route courte. Les flèches règlent le premier, **J L I K** le second. La route du milieu ne tient que deux voitures : si le second feu reste rouge trop longtemps, la file remonte jusque dans le premier carrefour, et la voiture qui traverse la percute.
+
 ## Commandes
 
 - **Clic** ou **doigt** sur un feu (ou près de sa voie) : il passe du vert au rouge, ou l'inverse.

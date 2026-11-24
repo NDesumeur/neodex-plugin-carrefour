@@ -12,8 +12,8 @@ module.exports = async ({ pj, sleep }) => {
   const first = await label(), n = +(/(\d+) voitures passées/.exec(first) || [])[1];
   if (!(n >= 1)) throw new Error('aucune voiture passée : « ' + first + ' »');
   // chaque carrefour : on le lance, on fait venir un véhicule spécial, on regarde un moment (le train arrive tout de suite au passage à niveau)
-  const names = ['croisement', 'pn', 'rond', 'etoile'], kinds = ['ambu', 'bus', 'trac', 'bike'];
-  for (let i = 0; i < 4; i++) {
+  const names = ['croisement', 'pn', 'rond', 'etoile', 'deux'], kinds = ['ambu', 'bus', 'trac', 'bike'];
+  for (let i = 0; i < 5; i++) {
     await C(`T.force(${i}); const c = T.st(); c.mode = 'play'; if (c.train) c.train.in = 150; return 0;`);
     await sleep(2500);
     await C(`const c = T.st(), d = Object.keys(T.maps[${i}].lanes)[1]; c.cars.push({id: 999, lane: d, P: T.maps[${i}].lanes[d][0], s: 0, len: ${[12, 19, 11, 7][0]}, v: 0, vmax: .8, kind: '${kinds[0]}', col: 0, wait: 0, angry: 0}); return 0;`);
@@ -36,5 +36,5 @@ module.exports = async ({ pj, sleep }) => {
   const L = await pj(`(() => { const r = document.getElementById('cfCanvas').getBoundingClientRect(); let s = 0; for (let e = document.getElementById('cfCanvas').parentElement; e; e = e.parentElement) s += e.scrollTop; return { bottom: Math.round(r.bottom + s), h: Math.round(r.height), wh: innerHeight, ww: innerWidth, sw: document.documentElement.scrollWidth }; })()`);
   if (process.env.NEO_FIT_LOG) console.log('FIT', JSON.stringify(L));
   if (L.bottom > L.wh + 1 || L.sw > L.ww + 1 || L.h < 300) throw new Error('la zone de jeu dépasse la fenêtre ou reste petite : ' + JSON.stringify(L));
-  return 'règles ok · ' + first + ' · 4 carrefours joués · plein écran · carrefour ' + L.h + ' px dans ' + L.ww + '×' + L.wh;
+  return 'règles ok · ' + first + ' · 5 carrefours joués · plein écran · carrefour ' + L.h + ' px dans ' + L.ww + '×' + L.wh;
 };

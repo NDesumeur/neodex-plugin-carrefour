@@ -4,6 +4,10 @@ A pixel art reflex game: you run the traffic lights of a crossroads where cars, 
 
 *Version française : [README.md](README.md)*
 
+## Two crossroads (new in 1.2.0)
+
+A fifth map, opened by 25 cars at the star: two crossroads linked by a short road. The arrows control the first one, **J L I K** the second. The middle road only holds two cars: if the second light stays red too long, the queue backs up into the first crossroads, and the car crossing it crashes into it.
+
 ## Controls
 
 - **Click** or **tap** a light (or near its lane): it switches from green to red, or back.
