@@ -127,5 +127,19 @@
  "bas du second": "bottom of the second",
  "file qui déborde": "queue spilling over",
  "second feu": "second light",
- "Jeu de réflexe : règle les feux d'un carrefour où voitures, bus, tracteurs, vélos et ambulances prioritaires arrivent de tous les côtés. Un clic (ou une touche) passe un feu au vert ou au rouge. Évite l'accident et ne laisse personne attendre trop longtemps. Quatre carrefours à débloquer : croisement, passage à niveau avec son train, rond-point, étoile à six voies. Plein écran, record par carrefour. Un cinquième carrefour : deux carrefours reliés, où chaque feu compte pour l'autre.": "Reflex game: run the lights of a crossroads where cars, buses, tractors, bikes and priority ambulances arrive from every side. A click (or a key) switches a light to green or red. Avoid crashes and don't keep anyone waiting too long. Four crossroads to unlock: crossing, level crossing with its train, roundabout, six-way star. Fullscreen, best score per crossroads. A fifth map: two linked crossroads, where each light matters for the other."
+ "Jeu de réflexe : règle les feux d'un carrefour où voitures, bus, tracteurs, vélos et ambulances prioritaires arrivent de tous les côtés. Un clic (ou une touche) passe un feu au vert ou au rouge. Évite l'accident et ne laisse personne attendre trop longtemps. Quatre carrefours à débloquer : croisement, passage à niveau avec son train, rond-point, étoile à six voies. Plein écran, record par carrefour. Un cinquième carrefour : deux carrefours reliés, où chaque feu compte pour l'autre.": "Reflex game: run the lights of a crossroads where cars, buses, tractors, bikes and priority ambulances arrive from every side. A click (or a key) switches a light to green or red. Avoid crashes and don't keep anyone waiting too long. Four crossroads to unlock: crossing, level crossing with its train, roundabout, six-way star. Fullscreen, best score per crossroads. A fifth map: two linked crossroads, where each light matters for the other.",
+ "Au vert": "Green light",
+ "Finir une première partie": "Finish your first game",
+ "Agent de la circulation": "Traffic warden",
+ "Faire passer 50 voitures en une partie": "Get 50 cars through in one game",
+ "Fluide": "Smooth flow",
+ "Faire passer 100 voitures en une partie": "Get 100 cars through in one game",
+ "Heure de pointe": "Rush hour",
+ "Faire passer 1 000 voitures en tout": "Get 1,000 cars through in total",
+ "Le train passe": "Here comes the train",
+ "Ouvrir le passage à niveau": "Unlock the level crossing",
+ "Toute la ville": "The whole town",
+ "Ouvrir tous les carrefours": "Unlock every crossroads",
+ "Chef de réseau": "Network chief",
+ "Faire passer 50 voitures aux deux carrefours": "Get 50 cars through the double crossroads"
 }

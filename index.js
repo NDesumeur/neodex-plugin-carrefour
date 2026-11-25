@@ -305,6 +305,9 @@ export default async function (ctx) {
   const best = (k, v) => { const b = games.best[k]; if (v > (b ?? 0)) {  // un score nul n'est jamais un record
     games.best[k] = v; saveGames(); return true; } return false; };
   const gstore = (k, init) => (games[k] ??= init);
+  // les trophées de NeoDex (3.4.8 et plus) : succès et records déclarés dans plugin.json ; sur un NeoDex plus ancien, rien ne se passe
+  const trophy = id => { ctx.games?.unlock(id).catch(() => {}); };
+  const trophyRecord = (id, v) => { if (v != null && Number.isFinite(+v)) ctx.games?.record(id, +v).catch(() => {}); };
 function gameLoop(st, appKey, update, draw) {
   cancelAnimationFrame(st.raf);
   const STEP = 1000 / 60; let acc = 0, last = performance.now();
@@ -574,6 +577,7 @@ function cfDraw() {
   if (cf.tick % 30 === 0) g.canvas.setAttribute('aria-label', 'Carrefour, ' + M.name.toLowerCase() + ' : ' + (cf.mode === 'play' ? cf.passed + ' voitures passées, ' + cf.stars + ' étoiles, feux verts : ' + (Object.keys(cf.light).filter(d => cf.light[d] && d !== 'B').map(d => ({E: 'gauche', W: 'droite', S: 'haut', N: 'bas', E2: 'gauche du second', W2: 'droite du second', S2: 'haut du second', N2: 'bas du second'})[d] || 'voie ' + d.slice(1)).join(', ') || 'aucun') + (cf.train ? ', barrière ' + (cf.light.B ? 'levée' : 'baissée') : '') : cf.mode === 'over' ? 'partie finie avec ' + cf.passed + ' voitures' : cf.mode === 'pause' ? 'pause' : 'prêt'));
 }
 function cfInfo() {
+  setTimeout(cfTrophies);
   const M = cfMap();
   $('cfStats').replaceChildren(...[['Record (' + M.name.toLowerCase() + ')', (games.best[M.rec] || 0) + ' voitures'], ['Parties', cfs.games], ['Voitures passées', cfs.cars], ['Accidents', cfs.crashes]].flatMap(([a, b]) => [el('span', '', a), el('b', '', String(b))]));
 }
@@ -635,6 +639,13 @@ function cfCheck() {  // vérification de chaque carrefour ; renvoie 'ok' ou ce 
 }
 $('cfCanvas').__cf = {st: () => cf, check: cfCheck, maps: CF_MAPS, force: i => { cfs.map = i; cfNew(i); }};  // pour l'auto-test
 console.assert(cfCheck() === 'ok', 'carrefour', cfCheck());
+// les trophées, tirés des statistiques et des records gardés (aussi à l'ouverture : ce qui a été fait avant compte)
+function cfTrophies() {
+  const r = CF_MAPS.map(m => games.best[m.rec] || 0), top = Math.max(...r), sig = [cfs.games, cfs.cars, r.join()].join(); if (sig === cfTrophies.sig) return; cfTrophies.sig = sig;
+  CF_MAPS.forEach((m, i) => trophyRecord(m.id, r[i] || null));
+  if (cfs.games >= 1) trophy('premier'); if (top >= 50) trophy('c50'); if (top >= 100) trophy('c100'); if (cfs.cars >= 1000) trophy('mille');
+  if (cfOpen(1)) trophy('pn'); if (CF_MAPS.every((_, i) => cfOpen(i))) trophy('cartes'); if (r[CF_MAPS.findIndex(m => m.id === 'deux')] >= 50) trophy('deux');
+}
 ctx.onOpen(() => {
   if (!cf || !cf.g) { cfNew(cfOpen(cfs.map) ? cfs.map : 0); cf.g = $('cfCanvas').getContext('2d'); cfMapList(); }
   gameLoop(cf, 'carrefour', cfUpdate, cfDraw); cfInfo();

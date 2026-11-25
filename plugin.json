@@ -1,7 +1,7 @@
 {
   "id": "neodex.carrefour",
   "name": "Carrefour",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "NDesumeur",
   "description": "Jeu de réflexe : règle les feux d'un carrefour où voitures, bus, tracteurs, vélos et ambulances prioritaires arrivent de tous les côtés. Un clic (ou une touche) passe un feu au vert ou au rouge. Évite l'accident et ne laisse personne attendre trop longtemps. Quatre carrefours à débloquer : croisement, passage à niveau avec son train, rond-point, étoile à six voies. Plein écran, record par carrefour. Un cinquième carrefour : deux carrefours reliés, où chaque feu compte pour l'autre.",
   "icon": "icon.png",
@@ -22,5 +22,80 @@
   "sdk": "2.1.0",
   "permissions": [
     "storage"
+  ],
+  "succes": [
+    {
+      "id": "premier",
+      "nom": "Au vert",
+      "texte": "Finir une première partie"
+    },
+    {
+      "id": "c50",
+      "nom": "Agent de la circulation",
+      "texte": "Faire passer 50 voitures en une partie"
+    },
+    {
+      "id": "c100",
+      "nom": "Fluide",
+      "texte": "Faire passer 100 voitures en une partie"
+    },
+    {
+      "id": "mille",
+      "nom": "Heure de pointe",
+      "texte": "Faire passer 1 000 voitures en tout"
+    },
+    {
+      "id": "pn",
+      "nom": "Le train passe",
+      "texte": "Ouvrir le passage à niveau"
+    },
+    {
+      "id": "cartes",
+      "nom": "Toute la ville",
+      "texte": "Ouvrir tous les carrefours"
+    },
+    {
+      "id": "deux",
+      "nom": "Chef de réseau",
+      "texte": "Faire passer 50 voitures aux deux carrefours",
+      "cache": true
+    }
+  ],
+  "records": [
+    {
+      "id": "croisement",
+      "nom": "Croisement",
+      "sens": "haut",
+      "format": "nombre",
+      "unite": "voitures"
+    },
+    {
+      "id": "pn",
+      "nom": "Passage à niveau",
+      "sens": "haut",
+      "format": "nombre",
+      "unite": "voitures"
+    },
+    {
+      "id": "rond",
+      "nom": "Rond-point",
+      "sens": "haut",
+      "format": "nombre",
+      "unite": "voitures"
+    },
+    {
+      "id": "etoile",
+      "nom": "Étoile à six voies",
+      "sens": "haut",
+      "format": "nombre",
+      "unite": "voitures"
+    },
+    {
+      "id": "deux",
+      "nom": "Deux carrefours",
+      "sens": "haut",
+      "format": "nombre",
+      "unite": "voitures"
+    }
   ]
 }
