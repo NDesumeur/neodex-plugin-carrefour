@@ -1,9 +1,9 @@
 {
   "pluginId": "neodex.carrefour",
   "repo": "NDesumeur/neodex-plugin-carrefour",
-  "version": "1.2.0",
-  "sha256": "a9efbd1196c1aa2b96d6e6a3990181b5a20f6201abd7bf94aa4f8504daa24f96",
-  "approvedAt": "2026-11-24T15:56:16.723Z",
+  "version": "1.3.0",
+  "sha256": "2cd9854facee1b6f33a4759ad52987bbf7526eb7a7e09e3efb4d625124f9df9c",
+  "approvedAt": "2026-11-25T17:16:40.756Z",
   "neobase": ">=4.0.0",
-  "signature": "pi8+c41cK7R3UswQ064xyG9RqKCNEU6sYX/ulxWSZjsvuzLka/ybuSmi/EfW2yYpwSYLPXnHO34qxscNir8dCw=="
+  "signature": "bdyLIvlBxxB5xAmao79YRZj/xOC+BvBqlrEX/ENFsQOcXvWQTzMuQpmXJkq1pSzq5kYaO6vRFwILApdS3YjzAw=="
 }
